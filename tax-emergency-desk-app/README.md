@@ -27,7 +27,7 @@ This repository is intentionally built as a durable production scaffold, not a c
 - Local storage adapter for MVP; keep private storage semantics.
 - Public landing page, case intake wizard, dashboard, reviewer queue, reviewer workbench, and admin command room.
 - Guardrails against guarantee language and document fabrication requests.
-- Tests for status transitions, guardrails, and RAG chunking.
+- Tests for status transitions, strict origin checks, guardrails, document upload limits, file signatures, malware response parsing, and RAG chunking.
 
 ## Product boundary
 
@@ -72,7 +72,7 @@ Seed accounts use password `ChangeMe123!`:
 
 ## Production checklist before launch
 
-- Configure `APP_ENV=production`; startup will fail unless S3 private storage, document encryption, ClamAV malware scanning, external OCR, OpenAI provider, and reviewer assignment enforcement are configured.
+- Configure `APP_ENV=production`; startup will fail unless S3 private storage, document encryption, ClamAV malware scanning, external OCR, OpenAI provider, Temporal, metrics token, and reviewer assignment enforcement are configured.
 - Complete VAPT/security review.
 - Complete legal review for Terms, Privacy Policy, DPA, and reviewer agreements.
 - Verify licensed tax consultant identity via official channels before showing reviewed-by-licensed-consultant claims.
@@ -80,6 +80,8 @@ Seed accounts use password `ChangeMe123!`:
 - Generate production secrets with `npm run secrets:generate`.
 - Validate release readiness with `npm run production:check`.
 - Run `npm run retention:run` on a schedule or enqueue `retention_sweep`.
+- Configure Prometheus to scrape `/api/metrics` with `Authorization: Bearer <METRICS_TOKEN>` and load `monitoring/prometheus-rules.yml`.
+- Send `Origin: <NEXT_PUBLIC_APP_URL>` on scripted production smoke tests for mutating API routes.
 - Run shadow QA with synthetic and professionally reviewed fixtures before charging users.
 - See `docs/ENTERPRISE_PRODUCTION_RUNBOOK.md`.
 

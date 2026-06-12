@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { env } from '@/config/env';
 import { sha256 } from '@/lib/crypto';
 import { jsonb, sql } from '@/lib/db';
+import { AppError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { getKeyvalCache, setKeyvalCache } from '@/server/cache/keyval';
 import type { AiOutputType } from '@/server/db/types';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 import { getLlmProvider } from './providers';
 
 type AiRunRow = {
@@ -168,11 +171,44 @@ export async function runStructuredAi<TSchema extends z.ZodTypeAny>(params: {
     }
     return { aiRun: { ...aiRun, status: 'succeeded' }, output, data: result.data };
   } catch (error) {
+    const normalizedError =
+      error instanceof z.ZodError
+        ? new AppError('AI_SCHEMA_VALIDATION_FAILED', 'AI output failed schema validation.', 502, { issues: error.issues })
+        : error;
+    const errorCode = normalizedError instanceof AppError ? normalizedError.code : 'AI_RUN_FAILED';
+    if (['AI_PROVIDER_TIMEOUT', 'AI_SCHEMA_VALIDATION_FAILED'].includes(errorCode)) {
+      await recordMonitoringEvent({
+        metricName: 'taxdesk_ai_provider_errors_total',
+        eventType: 'ai.provider_error',
+        tenantId: params.tenantId,
+        caseId: params.caseId,
+        labels: {
+          code: errorCode,
+          run_type: params.runType,
+          provider: provider.name,
+          model: provider.model
+        },
+        payload: { aiRunId: aiRun.id, documentId: params.documentId ?? null }
+      });
+      logger.error(
+        {
+          error: normalizedError,
+          code: errorCode,
+          caseId: params.caseId,
+          documentId: params.documentId,
+          runType: params.runType,
+          provider: provider.name,
+          model: provider.model,
+          metric: 'taxdesk_ai_provider_errors_total'
+        },
+        'AI provider-level failure'
+      );
+    }
     await sql`
       update ai_runs
-      set status = 'failed', completed_at = now(), error_message = ${error instanceof Error ? error.message : String(error)}
+      set status = 'failed', completed_at = now(), error_message = ${normalizedError instanceof Error ? normalizedError.message : String(normalizedError)}
       where id = ${aiRun.id}
     `;
-    throw error;
+    throw normalizedError;
   }
 }

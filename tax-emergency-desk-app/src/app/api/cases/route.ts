@@ -5,12 +5,12 @@ import { getRequestMeta } from '@/lib/http';
 import { assertSameOrigin } from '@/lib/security';
 import { auditLog } from '@/server/audit/audit';
 import { requireUser } from '@/server/auth/session';
-import { createCase, createCaseSchema } from '@/server/cases/service';
+import { createCase, createCaseSchema, sanitizeCaseForResponse } from '@/server/cases/service';
 import { assertRateLimit, RATE_LIMITS } from '@/server/rate-limit';
 import { requireTenantFromRequest } from '@/server/tenancy/context';
 import type { Case, DocumentRow } from '@/server/db/types';
 
-type CaseListItem = Case & {
+type CaseListItem = Omit<Case, 'taxpayerNpwpEncrypted'> & {
   documents: DocumentRow[];
   deliverables: Array<Record<string, unknown> & { versions: Record<string, unknown>[] }>;
 };
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         `
       : [];
     const casesWithRelations: CaseListItem[] = cases.map((kase) => ({
-      ...kase,
+      ...sanitizeCaseForResponse(kase),
       documents: documents.filter((doc) => doc.caseId === kase.id),
       deliverables: deliverables.filter((deliverable) => deliverable.caseId === kase.id)
     }));
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       userAgent: requestMeta.userAgent,
       payload: { caseType: kase.caseType, packageCode: kase.packageCode }
     });
-    return Response.json({ case: kase }, { status: 201 });
+    return Response.json({ case: sanitizeCaseForResponse(kase) }, { status: 201 });
   } catch (error) {
     return toErrorResponse(error);
   }

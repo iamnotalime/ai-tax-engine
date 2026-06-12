@@ -2,7 +2,8 @@ import { env } from '@/config/env';
 import { sha256 } from '@/lib/crypto';
 import { jsonb, sql } from '@/lib/db';
 import { AppError } from '@/lib/errors';
-import { DocumentStatus, type DocumentRow } from '@/server/db/types';
+import { CaseStatus, DocumentStatus, type DocumentRow } from '@/server/db/types';
+import { transitionCaseStatus } from '@/server/cases/service';
 import { encryptDocumentBuffer } from './encryption';
 import { assertValidFileSignature } from './file-validation';
 import { extractTextFromBuffer } from './text-extraction';
@@ -24,6 +25,7 @@ export async function storeCaseDocument(params: {
   caseId: string;
   uploadedByUserId: string;
   file: File;
+  fromStatus: CaseStatus;
 }) {
   if (!ALLOWED_MIME.has(params.file.type)) throw new AppError('UNSUPPORTED_FILE_TYPE', `Tipe file tidak didukung: ${params.file.type}`, 415);
   if (params.file.size > env.MAX_UPLOAD_BYTES) throw new AppError('FILE_TOO_LARGE', 'Ukuran file melebihi batas.', 413);
@@ -82,11 +84,14 @@ export async function storeCaseDocument(params: {
       insert into document_pages (document_id, page_number, text, ocr_confidence)
       values (${document.id}, 1, ${extracted.text}, ${extracted.confidence})
     `;
-    await tx`update cases set status = 'docs_uploaded', updated_at = now() where id = ${params.caseId}`;
-    await tx`
-      insert into case_events (case_id, event_type, to_status, actor_user_id, payload)
-      values (${params.caseId}, 'document.uploaded', 'docs_uploaded', ${params.uploadedByUserId}, ${jsonb({ documentId: document.id })})
-    `;
+    await transitionCaseStatus(tx, {
+      caseId: params.caseId,
+      fromStatus: params.fromStatus,
+      toStatus: CaseStatus.docs_uploaded,
+      actorUserId: params.uploadedByUserId,
+      eventType: 'document.uploaded',
+      payload: { documentId: document.id }
+    });
     return document;
   });
 }

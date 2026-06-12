@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Plus } from 'lucide-react';
+import { CaseWorklist } from '@/components/CaseWorklist';
 import { Nav } from '@/components/Nav';
 import { StatusBadge } from '@/components/StatusBadge';
-import { EmptyState } from '@/components/EmptyState';
 import { sql } from '@/lib/db';
 import { getSessionUser } from '@/server/auth/session';
 import { requireTenantFromCookies } from '@/server/tenancy/context';
@@ -43,18 +44,29 @@ export default async function DashboardPage() {
     counts[kase.status] = (counts[kase.status] ?? 0) + 1;
     return counts;
   }, {});
-  const recentCases = cases.slice(0, 8);
+  const worklistRows = cases.map((kase) => ({
+    id: kase.id,
+    title: kase.title,
+    status: kase.status,
+    caseType: kase.caseType,
+    packageCode: kase.packageCode,
+    documentCount: Number(kase.documentCount),
+    createdAt: kase.createdAt.toISOString(),
+    updatedAt: kase.updatedAt.toISOString()
+  }));
   return (
     <>
       <Nav />
       <main className="shell section stack">
-        <div className="actions" style={{ justifyContent: 'space-between' }}>
-          <div>
+        <div className="page-header">
+          <div className="page-copy">
             <p className="eyebrow">Dashboard</p>
             <h2>Case operations</h2>
             <p className="lede">{tenant.tenantName} workspace triage, reviewer flow, and deliverable state.</p>
           </div>
-          <Link className="button primary" href="/cases/new">Kasus baru</Link>
+          <div className="page-actions">
+            <Link className="button primary" href="/cases/new"><Plus size={18} aria-hidden="true" /> Kasus baru</Link>
+          </div>
         </div>
         <div className="metric-grid">
           <div className="metric"><span>Active cases</span><strong>{activeCases}</strong><p className="muted">Open work items</p></div>
@@ -62,44 +74,29 @@ export default async function DashboardPage() {
           <div className="metric"><span>Human review</span><strong>{inReview}</strong><p className="muted">Reviewer controlled</p></div>
           <div className="metric"><span>Documents</span><strong>{totalDocuments}</strong><p className="muted">Uploaded evidence</p></div>
         </div>
-        {!cases.length ? <EmptyState title="Belum ada kasus" body="Mulai dari free scan SP2DK atau error Coretax/e-Faktur." /> : (
-          <section className="workbench">
+        <section className="workbench">
+          <CaseWorklist
+            rows={worklistRows}
+            title="Case queue"
+            description={`Search, filter, sort, and prioritize ${internal ? 'tenant' : 'owner'} case files.`}
+            emptyTitle="Belum ada kasus"
+            emptyBody="Mulai dari free scan SP2DK atau error Coretax/e-Faktur."
+          />
+          <aside className="stack">
             <div className="card">
-              <div className="panel-title">
-                <div><h3>Case queue</h3><p className="muted">Recent case files with operational status.</p></div>
-                <span className="kpi">{internal ? 'internal view' : 'owner view'}</span>
+              <div className="panel-title"><h3>Status mix</h3><span className="kpi">{cases.length} total</span></div>
+              <div className="dense-list">
+                {Object.entries(statusCounts).map(([caseStatus, count]) => (
+                  <div className="dense-row" key={caseStatus}><StatusBadge status={caseStatus} /><strong>{count}</strong></div>
+                ))}
               </div>
-              <table className="table">
-                <thead><tr><th>Case</th><th>Type</th><th>Status</th><th>Docs</th><th>Updated</th></tr></thead>
-                <tbody>
-                  {recentCases.map((kase) => (
-                    <tr key={kase.id}>
-                      <td><Link href={`/cases/${kase.id}`}><strong>{kase.title ?? kase.id}</strong></Link><br /><span className="muted">{kase.id.slice(0, 8)}</span></td>
-                      <td>{kase.caseType.replaceAll('_', ' ')}</td>
-                      <td><StatusBadge status={kase.status} /></td>
-                      <td>{kase.documentCount}</td>
-                      <td>{kase.updatedAt.toLocaleDateString('id-ID')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
-            <aside className="stack">
-              <div className="card">
-                <div className="panel-title"><h3>Status mix</h3><span className="kpi">{cases.length} total</span></div>
-                <div className="dense-list">
-                  {Object.entries(statusCounts).map(([status, count]) => (
-                    <div className="dense-row" key={status}><StatusBadge status={status} /><strong>{count}</strong></div>
-                  ))}
-                </div>
-              </div>
-              <div className="risk-band">
-                <p className="eyebrow">Control rule</p>
-                <p className="muted">Case-specific paid outputs stay behind human review and senior approval.</p>
-              </div>
-            </aside>
-          </section>
-        )}
+            <div className="risk-band">
+              <p className="eyebrow">Control rule</p>
+              <p className="muted">Case-specific paid outputs stay behind human review and senior approval.</p>
+            </div>
+          </aside>
+        </section>
       </main>
     </>
   );

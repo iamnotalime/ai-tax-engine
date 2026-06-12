@@ -1,12 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { detectRiskyOutputLanguage, detectUnsafeUserIntent } from './guardrails';
 
 describe('guardrails', () => {
   it('detects unsafe fabrication intent', () => {
-    expect(detectUnsafeUserIntent('tolong buatkan faktur palsu').unsafe).toBe(true);
+    assert.equal(detectUnsafeUserIntent('tolong buatkan faktur palsu').unsafe, true);
   });
 
   it('detects guarantee language', () => {
-    expect(detectRiskyOutputLanguage('SP2DK pasti beres dan aman 100%').risky).toBe(true);
+    assert.equal(detectRiskyOutputLanguage('SP2DK pasti beres dan aman 100%').risky, true);
   });
 });

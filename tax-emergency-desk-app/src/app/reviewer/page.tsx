@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { CaseWorklist } from '@/components/CaseWorklist';
 import { Nav } from '@/components/Nav';
-import { StatusBadge } from '@/components/StatusBadge';
 import { sql } from '@/lib/db';
 import { getSessionUser } from '@/server/auth/session';
 import { requireTenantFromCookies } from '@/server/tenancy/context';
@@ -29,13 +28,37 @@ export default async function ReviewerQueuePage() {
     order by c.updated_at desc
     limit 50
   `;
+  const worklistRows = cases.map((kase) => ({
+    id: kase.id,
+    title: kase.title,
+    status: kase.status,
+    caseType: kase.caseType,
+    packageCode: kase.packageCode,
+    documentCount: Number(kase.documentCount),
+    evidenceCount: Number(kase.evidenceCount),
+    createdAt: kase.createdAt.toISOString(),
+    updatedAt: kase.updatedAt.toISOString()
+  }));
   return (
     <>
       <Nav />
       <main className="shell section stack">
-        <p className="eyebrow">Reviewer workbench</p>
-        <h2>Queue yang perlu judgement manusia.</h2>
-        <table className="table"><thead><tr><th>Case</th><th>Status</th><th>Docs</th><th>Evidence</th></tr></thead><tbody>{cases.map((kase) => <tr key={kase.id}><td><Link href={`/reviewer/cases/${kase.id}`}>{kase.title}</Link></td><td><StatusBadge status={kase.status} /></td><td>{kase.documentCount}</td><td>{kase.evidenceCount}</td></tr>)}</tbody></table>
+        <div className="page-header compact">
+          <div className="page-copy">
+            <p className="eyebrow">Reviewer workbench</p>
+            <h2>Queue yang perlu judgement manusia.</h2>
+            <p className="lede">Prioritaskan kasus yang sudah masuk review, senior QC, atau final draft.</p>
+          </div>
+          <div className="page-actions"><span className="kpi">{cases.length} open review items</span></div>
+        </div>
+        <CaseWorklist
+          rows={worklistRows}
+          hrefBase="/reviewer/cases"
+          title="Review queue"
+          description="Prioritized review work with status filters, search, pagination, and bulk selection."
+          emptyTitle="Review queue kosong"
+          emptyBody="Tidak ada kasus yang menunggu reviewer saat ini."
+        />
       </main>
     </>
   );

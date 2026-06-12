@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { AiTracePanel } from '@/components/AiTracePanel';
+import { DeliverablePreview } from '@/components/DeliverablePreview';
 import { Nav } from '@/components/Nav';
 import { StatusBadge } from '@/components/StatusBadge';
 import { sql } from '@/lib/db';
@@ -85,13 +87,13 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
     <>
       <Nav />
       <main className="shell section stack">
-        <div className="actions" style={{ justifyContent: 'space-between' }}>
-          <div>
+        <div className="page-header compact">
+          <div className="page-copy">
             <p className="eyebrow">Case file</p>
             <h2>{kase.title}</h2>
             <p className="muted">{kase.id}</p>
           </div>
-          <StatusBadge status={kase.status} />
+          <div className="page-actions"><StatusBadge status={kase.status} /></div>
         </div>
         <CaseActions caseId={kase.id} status={kase.status} />
 
@@ -115,11 +117,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
           <aside className="stack">
             <div className="card">
               <div className="panel-title"><h3>Uploaded docs</h3><span className="kpi">{kase.documents.length} files</span></div>
-              <div className="rail">{kase.documents.map((doc) => <div className="rail-item" key={doc.id}><strong>{doc.originalFilename}</strong><span className="rail-meta">{doc.category} / {doc.status}</span></div>)}</div>
+              <div className="rail">{kase.documents.map((doc) => <div className="rail-item" key={doc.id}><strong>{doc.originalFilename}</strong><span className="rail-meta">{doc.category.replaceAll('_', ' ')} / {doc.status.replaceAll('_', ' ')}</span></div>)}</div>
             </div>
             <div className="card">
               <div className="panel-title"><h3>Evidence checklist</h3><span className="kpi">{missingEvidence} gaps</span></div>
-              <div className="rail">{kase.evidenceItems.map((item) => <div className="rail-item" key={item.id}><div className="actions" style={{ justifyContent: 'space-between' }}><strong>{item.label}</strong><StatusBadge status={item.status} /></div></div>)}</div>
+              <div className="rail">{kase.evidenceItems.map((item) => <div className="rail-item" key={item.id}><div className="dense-row"><strong>{item.label}</strong><StatusBadge status={item.status} /></div></div>)}</div>
             </div>
             <div className="card">
               <div className="panel-title"><h3>Timeline</h3><span className="kpi">{kase.events.length} events</span></div>
@@ -127,8 +129,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
             </div>
           </aside>
           <article className="stack">
-            {latestVersion && <div className="card"><div className="panel-title"><h3>Latest deliverable</h3><span className="kpi">draft preview</span></div><pre className="markdown">{latestVersion.contentMarkdown}</pre></div>}
-            <div className="card"><div className="panel-title"><h3>AI outputs</h3><span className="kpi">{kase.aiOutputs.length} records</span></div>{kase.aiOutputs.map((out) => <details key={out.id}><summary>{out.outputType}</summary><pre className="markdown">{JSON.stringify(out.outputJson, null, 2)}</pre></details>)}</div>
+            {latestVersion && <DeliverablePreview contentMarkdown={latestVersion.contentMarkdown} title="Latest deliverable" />}
+            <AiTracePanel outputs={kase.aiOutputs} title="AI outputs" />
           </article>
         </section>
       </main>

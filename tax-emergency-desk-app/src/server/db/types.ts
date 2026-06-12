@@ -153,6 +153,8 @@ export type Case = {
   title: string | null;
   taxpayerType: string | null;
   taxpayerName: string | null;
+  taxpayerNpwpHash: string | null;
+  taxpayerNpwpEncrypted: Buffer | null;
   packageCode: string | null;
   sourceChannel: string | null;
   consentVersion: string | null;

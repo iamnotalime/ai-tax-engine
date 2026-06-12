@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '../src/config/env';
 import { sql } from '../src/lib/db';
+import { renderPrometheusMetrics } from '../src/server/observability/metrics';
 import { getStorageAdapter } from '../src/server/storage';
 
 type Check = {
@@ -29,11 +30,44 @@ async function checkDatabase() {
   await sql`select 1`;
   const migrations = await sql<Array<{ name: string }>>`select name from schema_migrations`;
   const names = new Set(migrations.map((row) => row.name));
-  if (!names.has('004_multi_tenant_temporal_keyval.sql')) {
-    fail('database.migrations', '004_multi_tenant_temporal_keyval.sql has not been applied.');
+  if (!names.has('005_observability_metrics.sql')) {
+    fail('database.migrations', '005_observability_metrics.sql has not been applied.');
     return;
   }
   pass('database.migrations', `${migrations.length} migrations applied.`);
+}
+
+async function checkMetricsRender() {
+  const metrics = await renderPrometheusMetrics();
+  for (const metric of [
+    'taxdesk_build_info',
+    'taxdesk_last_backup_success_timestamp',
+    'taxdesk_last_retention_success_timestamp',
+    'taxdesk_open_privacy_delete_requests',
+    'taxdesk_oldest_open_privacy_delete_request_age_seconds'
+  ]) {
+    if (!metrics.includes(metric)) throw new Error(`${metric} missing from metrics render.`);
+  }
+  pass('observability.metrics', 'Prometheus metrics render succeeded.');
+}
+
+async function checkPrometheusRules() {
+  const filePath = path.join(process.cwd(), 'monitoring', 'prometheus-rules.yml');
+  const content = await readFile(filePath, 'utf8');
+  const requiredAlerts = [
+    'TaxDeskAiProviderTimeout',
+    'TaxDeskAiSchemaValidationFailure',
+    'TaxDeskAiSupportCheckFailure',
+    'TaxDeskRateLimitSpike',
+    'TaxDeskPrivacyDeletionFailure',
+    'TaxDeskPrivacyDeletionStalled',
+    'TaxDeskRetentionSweepFailure',
+    'TaxDeskRetentionNotRunning',
+    'TaxDeskBackupStale'
+  ];
+  const missing = requiredAlerts.filter((alert) => !content.includes(`alert: ${alert}`));
+  if (missing.length) throw new Error(`Missing required Prometheus alerts: ${missing.join(', ')}.`);
+  pass('observability.alert_rules', `${requiredAlerts.length} required Prometheus alerts are present.`);
 }
 
 async function checkStorage() {
@@ -126,9 +160,11 @@ if (env.JOB_BACKEND === 'temporal') pass('env.JOB_BACKEND', 'temporal');
 if (env.KEYVAL_CACHE_ENABLED) pass('env.KEYVAL_CACHE_ENABLED', 'true');
 
 await runCheck('database', checkDatabase);
+await runCheck('observability.metrics', checkMetricsRender);
+await runCheck('observability.alert_rules', checkPrometheusRules);
 
 if (process.env.PRODUCTION_CHECK_SKIP_EXTERNALS === 'true') {
-  warn('external.smoke', 'Skipped S3 and ClamAV smoke tests because PRODUCTION_CHECK_SKIP_EXTERNALS=true.');
+  warn('external.smoke', 'Skipped S3, ClamAV, and Temporal smoke tests because PRODUCTION_CHECK_SKIP_EXTERNALS=true.');
 } else {
   await runCheck('storage.s3', checkStorage);
   await runCheck('malware.clamd', checkClamAv);

@@ -1,4 +1,7 @@
 import { redirect } from 'next/navigation';
+import { AiTracePanel } from '@/components/AiTracePanel';
+import { DeliverablePreview } from '@/components/DeliverablePreview';
+import { DocumentSourcePanel } from '@/components/DocumentSourcePanel';
 import { Nav } from '@/components/Nav';
 import { StatusBadge } from '@/components/StatusBadge';
 import { sql } from '@/lib/db';
@@ -66,15 +69,32 @@ export default async function ReviewerCasePage({ params }: { params: Promise<{ c
     <>
       <Nav />
       <main className="shell section stack">
-        <div className="actions" style={{ justifyContent: 'space-between' }}><div><p className="eyebrow">Reviewer case</p><h2>{kase.title}</h2></div><StatusBadge status={kase.status} /></div>
+        <div className="page-header compact">
+          <div className="page-copy">
+            <p className="eyebrow">Reviewer case</p>
+            <h2>{kase.title}</h2>
+            <p className="muted">{kase.id}</p>
+          </div>
+          <div className="page-actions"><StatusBadge status={kase.status} /></div>
+        </div>
         <section className="split">
           <aside className="stack">
-            <div className="card"><h3>Evidence</h3>{kase.evidenceItems.map((item) => <p key={item.id}><strong>{item.status}</strong> — {item.label}<br /><span className="muted">{item.description}</span></p>)}</div>
-            <div className="card"><h3>Sources</h3>{kase.documents.map((doc) => <details key={doc.id}><summary>{doc.originalFilename}</summary><pre className="markdown">{doc.pages.map((p) => p.text).join('\n\n')}</pre></details>)}</div>
+            <div className="card">
+              <div className="panel-title"><h3>Evidence</h3><span className="kpi">{kase.evidenceItems.length} rows</span></div>
+              <div className="rail">
+                {kase.evidenceItems.map((item) => (
+                  <div className="rail-item" key={item.id}>
+                    <div className="dense-row"><strong>{item.label}</strong><StatusBadge status={item.status} /></div>
+                    {item.description && <span className="muted">{item.description}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DocumentSourcePanel documents={kase.documents} />
           </aside>
           <article className="stack">
-            {latestVersion && <div className="card"><h3>Draft deliverable</h3><pre className="markdown">{latestVersion.contentMarkdown}</pre></div>}
-            <div className="card"><h3>AI trace</h3>{kase.aiOutputs.map((out) => <details key={out.id}><summary>{out.outputType}</summary><pre className="markdown">{JSON.stringify(out.outputJson, null, 2)}</pre></details>)}</div>
+            {latestVersion && <DeliverablePreview contentMarkdown={latestVersion.contentMarkdown} />}
+            <AiTracePanel outputs={kase.aiOutputs} title="AI trace" />
             <ReviewForm caseId={kase.id} role={user.role} />
           </article>
         </section>

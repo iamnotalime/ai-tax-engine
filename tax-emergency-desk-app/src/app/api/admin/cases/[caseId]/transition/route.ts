@@ -7,7 +7,7 @@ import { AppError, toErrorResponse } from '@/lib/errors';
 import { auditLog } from '@/server/audit/audit';
 import { assertCanAccessCase } from '@/server/auth/authorization';
 import { requireRole } from '@/server/auth/session';
-import { transitionCase } from '@/server/cases/service';
+import { sanitizeCaseForResponse, transitionCase } from '@/server/cases/service';
 import { CaseStatus, type Case } from '@/server/db/types';
 
 const schema = z.object({ toStatus: z.nativeEnum(CaseStatus), reason: z.string().max(500).optional() });
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
       userAgent: requestMeta.userAgent,
       payload: { toStatus: input.toStatus, reason: input.reason ?? null }
     });
-    return Response.json({ case: kase });
+    return Response.json({ case: sanitizeCaseForResponse(kase) });
   } catch (error) {
     return toErrorResponse(error);
   }

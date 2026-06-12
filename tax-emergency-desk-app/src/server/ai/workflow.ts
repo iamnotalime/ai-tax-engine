@@ -1,5 +1,8 @@
 import { jsonb, sql } from '@/lib/db';
-import { AiOutputType, CaseType, type Case, type DocumentPageRow, type DocumentRow } from '@/server/db/types';
+import { logger } from '@/lib/logger';
+import { transitionCaseStatus } from '@/server/cases/service';
+import { AiOutputType, CaseStatus, CaseType, type Case, type DocumentPageRow, type DocumentRow } from '@/server/db/types';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 import { assertNoGuaranteeLanguage } from './guardrails';
 import {
   PROMPT_VERSION,
@@ -62,11 +65,12 @@ export async function runTaxTriageWorkflow(caseId: string, tenantId?: string) {
   if (!kase) throw new Error('Case not found');
 
   await sql.begin(async (tx) => {
-    await tx`update cases set status = 'ai_triage_running', updated_at = now() where id = ${caseId}`;
-    await tx`
-      insert into case_events (case_id, event_type, from_status, to_status, payload)
-      values (${caseId}, 'ai.workflow_started', ${kase.status}, 'ai_triage_running', ${jsonb({})})
-    `;
+    await transitionCaseStatus(tx, {
+      caseId,
+      fromStatus: kase.status,
+      toStatus: CaseStatus.ai_triage_running,
+      eventType: 'ai.workflow_started'
+    });
   });
 
   const classifications: DocumentClassificationOutput[] = [];
@@ -241,6 +245,42 @@ export async function runTaxTriageWorkflow(caseId: string, tenantId?: string) {
     ...supportCheckPrompt(draft.data, evidence.data, await getCaseSourceExtracts(caseId)),
     visibleToUser: false
   });
+  if (!support.data.supported || support.data.unsupported_claims.length || support.data.risky_language.length) {
+    await recordMonitoringEvent({
+      metricName: 'taxdesk_support_check_failures_total',
+      eventType: 'ai.support_check_failed',
+      tenantId: kase.tenantId,
+      caseId,
+      labels: {
+        supported: support.data.supported,
+        unsupported_claims: support.data.unsupported_claims.length,
+        risky_language: support.data.risky_language.length
+      },
+      payload: { aiRunId: support.aiRun.id }
+    });
+    logger.warn(
+      {
+        caseId,
+        aiRunId: support.aiRun.id,
+        unsupportedClaims: support.data.unsupported_claims.length,
+        riskyLanguage: support.data.risky_language.length,
+        metric: 'taxdesk_support_check_failures_total'
+      },
+      'AI support check failed'
+    );
+    await sql`
+      insert into case_events (case_id, event_type, payload)
+      values (
+        ${caseId},
+        'ai.support_check_failed',
+        ${jsonb({
+          aiRunId: support.aiRun.id,
+          unsupportedClaims: support.data.unsupported_claims,
+          riskyLanguage: support.data.risky_language
+        })}
+      )
+    `;
+  }
 
   const markdown = buildDeliverableMarkdown({ caseId, caseSummary, evidence: evidence.data, draft: draft.data, support: support.data });
   const deliverable = await sql.begin(async (tx) => {
@@ -255,11 +295,13 @@ export async function runTaxTriageWorkflow(caseId: string, tenantId?: string) {
       returning id
     `;
     await tx`update deliverables set current_version_id = ${createdVersion.id}, updated_at = now() where id = ${createdDeliverable.id}`;
-    await tx`update cases set status = 'ai_triage_done', updated_at = now() where id = ${caseId}`;
-    await tx`
-      insert into case_events (case_id, event_type, from_status, to_status, payload)
-      values (${caseId}, 'ai.workflow_completed', 'ai_triage_running', 'ai_triage_done', ${jsonb({ supportCheck: support.data })})
-    `;
+    await transitionCaseStatus(tx, {
+      caseId,
+      fromStatus: CaseStatus.ai_triage_running,
+      toStatus: CaseStatus.ai_triage_done,
+      eventType: 'ai.workflow_completed',
+      payload: { supportCheck: support.data }
+    });
     return createdDeliverable;
   });
   return { classifications, caseSummary, evidence: evidence.data, draft: draft.data, support: support.data, deliverableId: deliverable.id };

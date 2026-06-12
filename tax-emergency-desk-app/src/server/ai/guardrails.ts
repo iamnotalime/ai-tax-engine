@@ -1,3 +1,5 @@
+import { AppError } from '@/lib/errors';
+
 const GUARANTEE_PATTERNS = [/pasti\s+(beres|aman|diterima|selesai)/i, /jamin(an|)\s+(diterima|aman|beres)/i, /100%\s+(aman|diterima|beres)/i];
 const FABRICATION_PATTERNS = [/buat(kan)?\s+(invoice|faktur|bukti)\s+palsu/i, /ubah\s+(tanggal|nominal|npwp|faktur)/i, /sembunyikan\s+(omzet|penghasilan|transaksi)/i, /hapus\s+(bukti|transaksi)/i];
 
@@ -16,5 +18,14 @@ export function assertNoGuaranteeLanguage(text: string) {
   const result = detectRiskyOutputLanguage(text);
   if (result.risky) {
     throw new Error(`Risky guarantee language detected: ${result.patterns.join(', ')}`);
+  }
+}
+
+export function assertSafeUserIntent(text: string) {
+  const result = detectUnsafeUserIntent(text);
+  if (result.unsafe) {
+    throw new AppError('UNSAFE_USER_INTENT', 'Permintaan yang mengarah ke fabrikasi atau misrepresentasi dokumen tidak dapat diproses.', 400, {
+      reasons: result.reasons
+    });
   }
 }

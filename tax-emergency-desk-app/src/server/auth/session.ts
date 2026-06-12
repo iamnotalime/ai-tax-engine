@@ -6,6 +6,8 @@ import { AppError } from '@/lib/errors';
 import type { AppUser } from '@/server/db/types';
 
 const secret = new TextEncoder().encode(env.AUTH_SECRET);
+const issuer = 'tax-emergency-desk';
+const audience = env.NEXT_PUBLIC_APP_URL;
 
 type SessionClaims = {
   sub: string;
@@ -17,14 +19,17 @@ export async function createSessionCookie(claims: SessionClaims) {
   const token = await new SignJWT({ email: claims.email, role: claims.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
+    .setIssuer(issuer)
+    .setAudience(audience)
     .setIssuedAt()
+    .setNotBefore('0s')
     .setExpirationTime('7d')
     .sign(secret);
   const jar = await cookies();
   jar.set(env.SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    secure: env.NODE_ENV === 'production' || env.APP_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24 * 7
   });
@@ -40,7 +45,7 @@ export async function getSessionUser() {
   const token = jar.get(env.SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
   try {
-    const verified = await jwtVerify(token, secret);
+    const verified = await jwtVerify(token, secret, { issuer, audience });
     const userId = verified.payload.sub;
     if (!userId) return null;
     const [user] = await sql<AppUser[]>`

@@ -62,6 +62,7 @@ PAID_CASE_RETENTION_DAYS=180
 
 # Worker/API secrets
 INTERNAL_JOB_TOKEN=replace-with-cron-token
+METRICS_TOKEN=replace-with-prometheus-token
 
 # Security/privacy
 RATE_LIMIT_ENABLED=true
@@ -79,8 +80,33 @@ REVIEW_ASSIGNMENT_REQUIRED=false
 - `AI_PROVIDER=openai` with `OPENAI_API_KEY`.
 - `JOB_BACKEND=temporal` with reachable `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_TASK_QUEUE`.
 - `KEYVAL_CACHE_ENABLED=true` for tenant-scoped AI/RAG cache reuse.
+- `METRICS_TOKEN` set to a non-placeholder secret of at least 32 characters.
 - `REVIEW_ASSIGNMENT_REQUIRED=true`.
 - Non-localhost `NEXT_PUBLIC_APP_URL`.
+
+## Metrics
+
+`GET /api/metrics` exposes Prometheus text metrics and requires:
+
+```http
+Authorization: Bearer <METRICS_TOKEN>
+```
+
+The endpoint includes:
+
+- `taxdesk_ai_provider_errors_total`
+- `taxdesk_support_check_failures_total`
+- `taxdesk_jobs_failed_total`
+- `taxdesk_http_responses_total`
+- `taxdesk_rate_limited_total`
+- `taxdesk_privacy_requests_total`
+- `taxdesk_retention_runs_total`
+- `taxdesk_last_backup_success_timestamp`
+- `taxdesk_last_retention_success_timestamp`
+- `taxdesk_open_privacy_delete_requests`
+- `taxdesk_oldest_open_privacy_delete_request_age_seconds`
+
+Mutating API calls must include an `Origin` header matching `NEXT_PUBLIC_APP_URL`. Browser requests do this automatically for same-origin app traffic; scripted production smoke tests should set the header explicitly.
 
 ## Multi-tenancy
 

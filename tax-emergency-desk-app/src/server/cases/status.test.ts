@@ -1,12 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { assertValidStatusTransition } from './status';
 
 describe('case status transitions', () => {
   it('allows configured transition', () => {
-    expect(() => assertValidStatusTransition('docs_uploaded', 'ai_triage_queued')).not.toThrow();
+    assert.doesNotThrow(() => assertValidStatusTransition('docs_uploaded', 'ai_triage_queued'));
   });
 
   it('rejects invalid transition', () => {
-    expect(() => assertValidStatusTransition('draft', 'delivered')).toThrow(/tidak dapat/);
+    assert.throws(() => assertValidStatusTransition('draft', 'delivered'), /tidak dapat/);
   });
 });

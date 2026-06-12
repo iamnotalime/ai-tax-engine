@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { jsonb, sql } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { AppError, toErrorResponse } from '@/lib/errors';
 import { getRequestMeta } from '@/lib/http';
 import { assertSameOrigin } from '@/lib/security';
 import { auditLog } from '@/server/audit/audit';
 import { requireUser } from '@/server/auth/session';
 import { assertCanAccessCase } from '@/server/auth/authorization';
-import { OutcomeType, type Case } from '@/server/db/types';
+import { transitionCaseStatus } from '@/server/cases/service';
+import { CaseStatus, OutcomeType, type Case } from '@/server/db/types';
 
 const schema = z.object({ outcomeType: z.nativeEnum(OutcomeType), outcomeDate: z.string().optional(), notes: z.string().max(4000).optional() });
 
@@ -26,11 +27,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
         values (${caseId}, ${user.id}, ${input.outcomeType}, ${input.outcomeDate ?? null}, ${input.notes ?? null})
         returning *
       `;
-      await tx`update cases set status = 'closed', closed_at = now(), updated_at = now() where id = ${caseId}`;
-      await tx`
-        insert into case_events (case_id, event_type, from_status, to_status, actor_user_id, payload)
-        values (${caseId}, 'case.outcome_reported', ${kase.status}, 'closed', ${user.id}, ${jsonb({ outcomeId: rows[0].id })})
-      `;
+      await transitionCaseStatus(tx, {
+        caseId,
+        fromStatus: kase.status,
+        toStatus: CaseStatus.closed,
+        actorUserId: user.id,
+        eventType: 'case.outcome_reported',
+        payload: { outcomeId: rows[0].id },
+        closeCase: true
+      });
       return rows;
     });
     const requestMeta = getRequestMeta(req);

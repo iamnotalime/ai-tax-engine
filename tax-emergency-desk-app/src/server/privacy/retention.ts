@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { sql } from '@/lib/db';
 import { auditLog } from '@/server/audit/audit';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 import { getStorageAdapter } from '@/server/storage';
 
 type ExpiredCase = {
@@ -83,6 +84,13 @@ export async function runRetentionSweep(tenantId?: string) {
           cases_deleted = ${cases.length}
       where id = ${run.id}
     `;
+    await recordMonitoringEvent({
+      metricName: 'taxdesk_retention_runs_total',
+      eventType: 'retention.succeeded',
+      tenantId: tenantId ?? null,
+      labels: { status: 'succeeded' },
+      payload: { runId: run.id, aiRawOutputsRedacted, casesDeleted: cases.length }
+    });
     return { aiRawOutputsRedacted, casesDeleted: cases.length };
   } catch (error) {
     await sql`
@@ -92,6 +100,13 @@ export async function runRetentionSweep(tenantId?: string) {
           error_message = ${error instanceof Error ? error.message : String(error)}
       where id = ${run.id}
     `;
+    await recordMonitoringEvent({
+      metricName: 'taxdesk_retention_runs_total',
+      eventType: 'retention.failed',
+      tenantId: tenantId ?? null,
+      labels: { status: 'failed' },
+      payload: { runId: run.id, errorMessage: error instanceof Error ? error.message : String(error) }
+    });
     throw error;
   }
 }

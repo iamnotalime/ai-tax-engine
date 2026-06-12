@@ -53,3 +53,8 @@ export const PACKAGES = [
     deliverables: ['error_summary', 'likely_causes', 'fix_checklist', 'escalation_notes']
   }
 ] as const;
+
+export const UPLOAD_LIMITS = {
+  maxFilesFreeScan: 3,
+  maxFilesPaidCase: 30
+} as const;

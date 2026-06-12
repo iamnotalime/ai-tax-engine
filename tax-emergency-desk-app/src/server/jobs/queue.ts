@@ -1,5 +1,6 @@
 import { jsonb, sql } from '@/lib/db';
 import type { JobRow } from '@/server/db/types';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 
 export async function enqueueJob(jobType: string, payload: Record<string, unknown>, priority = 100, tenantId?: string | null) {
   const [job] = await sql<JobRow[]>`
@@ -61,5 +62,12 @@ export async function failJob(jobId: string, error: unknown) {
     where id = ${jobId}
     returning *
   `;
+  await recordMonitoringEvent({
+    metricName: 'taxdesk_jobs_failed_total',
+    eventType: 'job.failed',
+    tenantId: job.tenantId,
+    labels: { job_type: job.jobType, terminal: !retry },
+    payload: { jobId, attempts: job.attempts, maxAttempts: job.maxAttempts, errorMessage: message }
+  });
   return updated;
 }

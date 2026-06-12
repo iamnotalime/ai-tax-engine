@@ -11,7 +11,7 @@ export default async function NewCasePage() {
       <Nav />
       <main className="shell section">
         <div className="split">
-          <div className="stack">
+          <div className="page-copy">
             <p className="eyebrow">Intake wizard</p>
             <h2>Ubah dokumen panik menjadi case file.</h2>
             <p className="lede">Mulai dengan surat SP2DK atau screenshot error. Jangan unggah credential DJP/Coretax.</p>

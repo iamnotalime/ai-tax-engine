@@ -13,12 +13,25 @@ import type { AppUser } from '@/server/db/types';
 
 const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
 
+async function parseLoginInput(req: NextRequest) {
+  const contentType = req.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) return { input: schema.parse(await req.json()), htmlFormPost: false };
+  const formData = await req.formData();
+  return {
+    input: schema.parse({
+      email: formData.get('email'),
+      password: formData.get('password')
+    }),
+    htmlFormPost: true
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     await assertRateLimit(req, RATE_LIMITS.authIp);
     const requestMeta = getRequestMeta(req);
-    const input = schema.parse(await req.json());
+    const { input, htmlFormPost } = await parseLoginInput(req);
     const email = input.email.toLowerCase();
     await assertRateLimit(req, RATE_LIMITS.authIdentity, [email]);
     const [user] = await sql<AppUser[]>`select * from app_users where email = ${email} limit 1`;
@@ -40,6 +53,7 @@ export async function POST(req: NextRequest) {
       ipAddress: requestMeta.ipAddress,
       userAgent: requestMeta.userAgent
     });
+    if (htmlFormPost) return Response.redirect(new URL('/dashboard', req.url), 303);
     return Response.json({ user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role } });
   } catch (error) {
     return toErrorResponse(error);

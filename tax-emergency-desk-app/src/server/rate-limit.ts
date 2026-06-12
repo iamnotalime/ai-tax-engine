@@ -4,6 +4,7 @@ import { sha256 } from '@/lib/crypto';
 import { sql } from '@/lib/db';
 import { AppError } from '@/lib/errors';
 import { getClientIp } from '@/lib/http';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 
 type RateLimitPolicy = {
   namespace: string;
@@ -63,6 +64,12 @@ export async function assertRateLimit(req: NextRequest, policy: RateLimitPolicy,
   if (!row || row.count <= policy.limit) return;
 
   const retryAfterSeconds = Math.max(1, Math.ceil((new Date(row.expiresAt).getTime() - Date.now()) / 1000));
+  await recordMonitoringEvent({
+    metricName: 'taxdesk_rate_limited_total',
+    eventType: 'rate_limit.exceeded',
+    labels: { namespace: policy.namespace },
+    payload: { retryAfterSeconds, limit: policy.limit, windowMs: policy.windowMs }
+  });
   throw new AppError('RATE_LIMITED', 'Terlalu banyak request. Coba lagi nanti.', 429, {
     retryAfterSeconds,
     limit: policy.limit,

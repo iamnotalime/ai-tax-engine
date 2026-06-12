@@ -5,6 +5,7 @@ import { getRequestMeta } from '@/lib/http';
 import { auditLog } from '@/server/audit/audit';
 import { requireUser } from '@/server/auth/session';
 import { assertCanAccessCase } from '@/server/auth/authorization';
+import { sanitizeCaseForResponse } from '@/server/cases/service';
 import type { Case, DocumentPageRow, DocumentRow } from '@/server/db/types';
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ caseId: string }> }) {
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ caseId: str
     ]);
     const kase = baseCase
       ? {
-          ...baseCase,
+          ...sanitizeCaseForResponse(baseCase),
           documents: documents.map((doc) => ({
             ...doc,
             pages: pages.filter((page) => page.documentId === doc.id),

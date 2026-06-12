@@ -1,3 +1,83 @@
+const LABELS: Record<string, string> = {
+  draft: 'Draft',
+  intake_started: 'Intake started',
+  docs_uploaded: 'Docs uploaded',
+  ai_triage_queued: 'AI queued',
+  ai_triage_running: 'AI running',
+  ai_triage_done: 'AI complete',
+  free_scan_delivered: 'Free scan sent',
+  waiting_payment: 'Waiting payment',
+  paid: 'Paid',
+  ops_review: 'Ops review',
+  need_more_docs: 'Needs documents',
+  reviewer_assigned: 'Reviewer assigned',
+  reviewer_reviewing: 'In review',
+  senior_qc: 'Senior QC',
+  final_draft_ready: 'Final draft ready',
+  delivered: 'Delivered',
+  outcome_pending: 'Outcome pending',
+  closed: 'Closed',
+  escalated: 'Escalated',
+  cancelled: 'Cancelled',
+  queued: 'Queued',
+  running: 'Running',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  requested: 'Requested',
+  processing: 'Processing',
+  fulfilled: 'Fulfilled',
+  missing: 'Missing',
+  insufficient: 'Insufficient',
+  approved: 'Approved',
+  approve: 'Approved',
+  request_changes: 'Changes requested',
+  request_more_docs: 'Needs documents',
+  escalate: 'Escalate',
+  reject: 'Rejected'
+};
+
+const TONES: Record<string, string> = {
+  draft: 'neutral',
+  intake_started: 'info',
+  docs_uploaded: 'info',
+  ai_triage_queued: 'info',
+  ai_triage_running: 'info',
+  ai_triage_done: 'success',
+  free_scan_delivered: 'success',
+  waiting_payment: 'warning',
+  paid: 'success',
+  ops_review: 'warning',
+  need_more_docs: 'warning',
+  reviewer_assigned: 'warning',
+  reviewer_reviewing: 'warning',
+  senior_qc: 'warning',
+  final_draft_ready: 'success',
+  delivered: 'success',
+  outcome_pending: 'warning',
+  closed: 'neutral',
+  escalated: 'danger',
+  cancelled: 'neutral',
+  queued: 'info',
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
+  requested: 'info',
+  processing: 'warning',
+  fulfilled: 'success',
+  missing: 'danger',
+  insufficient: 'warning',
+  approved: 'success',
+  approve: 'success',
+  request_changes: 'warning',
+  request_more_docs: 'warning',
+  escalate: 'danger',
+  reject: 'danger'
+};
+
+export function statusLabel(status: string) {
+  return LABELS[status] ?? status.replaceAll('_', ' ');
+}
+
 export function StatusBadge({ status }: { status: string }) {
-  return <span className="status">{status.replaceAll('_', ' ')}</span>;
+  return <span className={`status ${TONES[status] ?? 'neutral'}`}>{statusLabel(status)}</span>;
 }

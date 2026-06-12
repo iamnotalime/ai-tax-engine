@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Nav } from '@/components/Nav';
-import { StatusBadge } from '@/components/StatusBadge';
+import { EmptyState } from '@/components/EmptyState';
+import { PrivacyRequestTable } from '@/components/PrivacyRequestTable';
 import { sql } from '@/lib/db';
 import { getSessionUser } from '@/server/auth/session';
 import { requireTenantFromCookies } from '@/server/tenancy/context';
@@ -19,34 +20,29 @@ export default async function PrivacyPage() {
     order by requested_at desc
     limit 20
   `;
+  const requestRows = requests.map((request) => ({
+    id: request.id,
+    requestType: request.requestType,
+    status: request.status,
+    requestedAt: request.requestedAt.toISOString(),
+    fulfilledAt: request.fulfilledAt?.toISOString() ?? null
+  }));
 
   return (
     <>
       <Nav />
       <main className="shell section stack">
-        <div>
+        <div className="page-header compact">
+          <div className="page-copy">
           <p className="eyebrow">Privacy ops</p>
           <h2>Data controls</h2>
+          <p className="lede">Export your case data or queue a deletion request for this workspace.</p>
+          </div>
         </div>
         <div className="card">
           <PrivacyActions />
         </div>
-        <div className="card">
-          <h3>Request ledger</h3>
-          <table className="table">
-            <thead><tr><th>Type</th><th>Status</th><th>Requested</th><th>Fulfilled</th></tr></thead>
-            <tbody>
-              {requests.map((request) => (
-                <tr key={request.id}>
-                  <td>{request.requestType}</td>
-                  <td><StatusBadge status={request.status} /></td>
-                  <td>{request.requestedAt.toLocaleString('id-ID')}</td>
-                  <td>{request.fulfilledAt ? request.fulfilledAt.toLocaleString('id-ID') : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {!requests.length ? <EmptyState title="Belum ada request" body="Export atau deletion request akan muncul di ledger ini." /> : <PrivacyRequestTable rows={requestRows} />}
       </main>
     </>
   );

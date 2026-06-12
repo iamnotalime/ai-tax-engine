@@ -25,6 +25,62 @@ groups:
         annotations:
           summary: AI triage job failures exceeded threshold
 
+      - alert: TaxDeskAiProviderTimeout
+        expr: increase(taxdesk_ai_provider_errors_total{code="AI_PROVIDER_TIMEOUT"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI provider timeout detected
+
+      - alert: TaxDeskAiSchemaValidationFailure
+        expr: increase(taxdesk_ai_provider_errors_total{code="AI_SCHEMA_VALIDATION_FAILED"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI output schema validation failed
+
+      - alert: TaxDeskAiSupportCheckFailure
+        expr: increase(taxdesk_support_check_failures_total[15m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI support check reported unsupported claims or risky language
+
+      - alert: TaxDeskRateLimitSpike
+        expr: increase(taxdesk_rate_limited_total[10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Rate limiting spiked across protected API routes
+
+      - alert: TaxDeskPrivacyDeletionFailure
+        expr: increase(taxdesk_privacy_requests_total{request_type="delete",status="failed"}[15m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Data deletion request failed
+
+      - alert: TaxDeskPrivacyDeletionStalled
+        expr: taxdesk_oldest_open_privacy_delete_request_age_seconds > 172800
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: Data deletion request has been open for more than 48 hours
+
+      - alert: TaxDeskRetentionSweepFailure
+        expr: increase(taxdesk_retention_runs_total{status="failed"}[24h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Retention sweep failed
+
       - alert: TaxDeskRetentionNotRunning
         expr: time() - taxdesk_last_retention_success_timestamp > 172800
         for: 30m

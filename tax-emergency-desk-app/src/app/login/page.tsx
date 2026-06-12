@@ -7,7 +7,7 @@ export default function LoginPage() {
       <Nav />
       <main className="shell section">
         <div className="split">
-          <div className="stack">
+          <div className="page-copy">
             <p className="eyebrow">Secure access</p>
             <h2>Masuk ke ruang kasus.</h2>
             <p className="lede">Gunakan akun user, ops, atau reviewer. Untuk demo lokal, jalankan seed untuk membuat akun contoh.</p>

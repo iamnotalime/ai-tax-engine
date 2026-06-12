@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { CaseWorklist } from '@/components/CaseWorklist';
+import { JobWorklist } from '@/components/JobWorklist';
 import { Nav } from '@/components/Nav';
 import { StatusBadge } from '@/components/StatusBadge';
 import { sql } from '@/lib/db';
@@ -7,13 +9,21 @@ import { requireTenantFromCookies } from '@/server/tenancy/context';
 import type { Case, DataSubjectRequestRow, JobRow } from '@/server/db/types';
 import { AdminOpsActions } from './ui';
 
+type AdminCase = Case & { documentCount: number };
+
 export default async function AdminPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
   if (!['ops', 'licensed_tax_consultant', 'admin'].includes(user.role)) redirect('/dashboard');
   const tenant = await requireTenantFromCookies(user);
   const [cases, jobs, audits, dataRequests, retentionRuns] = await Promise.all([
-    sql<Case[]>`select * from cases where tenant_id = ${tenant.tenantId} order by created_at desc limit 25`,
+    sql<AdminCase[]>`
+      select c.*, (select count(*)::int from documents d where d.case_id = c.id) as document_count
+      from cases c
+      where c.tenant_id = ${tenant.tenantId}
+      order by c.created_at desc
+      limit 25
+    `,
     sql<JobRow[]>`select * from jobs where tenant_id = ${tenant.tenantId} order by created_at desc limit 25`,
     sql<Record<string, unknown>[]>`select * from audit_logs where tenant_id = ${tenant.tenantId} order by created_at desc limit 25`,
     sql<DataSubjectRequestRow[]>`select * from data_subject_requests where tenant_id = ${tenant.tenantId} order by requested_at desc limit 25`,
@@ -26,17 +36,38 @@ export default async function AdminPage() {
   const queuedJobs = jobs.filter((job) => job.status === 'queued').length;
   const pendingDataRequests = dataRequests.filter((request) => request.status === 'requested' || request.status === 'processing').length;
   const latestRetention = retentionRuns[0];
+  const caseRows = cases.map((kase) => ({
+    id: kase.id,
+    title: kase.title,
+    status: kase.status,
+    caseType: kase.caseType,
+    packageCode: kase.packageCode,
+    documentCount: Number(kase.documentCount),
+    createdAt: kase.createdAt.toISOString(),
+    updatedAt: kase.updatedAt.toISOString()
+  }));
+  const jobRows = jobs.map((job) => ({
+    id: job.id,
+    jobType: job.jobType,
+    status: job.status,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    priority: job.priority,
+    errorMessage: job.errorMessage,
+    createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString()
+  }));
   return (
     <>
       <Nav />
       <main className="shell section stack">
-        <div className="actions" style={{ justifyContent: 'space-between' }}>
-          <div>
+        <div className="page-header compact">
+          <div className="page-copy">
             <p className="eyebrow">Ops command</p>
             <h2>Production control room</h2>
             <p className="lede">{tenant.tenantName} operational posture, queue pressure, privacy controls, and retention checks.</p>
           </div>
-          <div className="kpi-strip">
+          <div className="page-actions kpi-strip">
             <span className="kpi">role: {user.role}</span>
             <span className="kpi">audit: {audits.length}</span>
           </div>
@@ -50,19 +81,13 @@ export default async function AdminPage() {
         </div>
         <section className="workbench">
           <div className="stack">
-            <div className="card">
-              <div className="panel-title"><h3>Recent cases</h3><span className="kpi">{cases.length} rows</span></div>
-              <table className="table"><thead><tr><th>Case</th><th>Status</th><th>Type</th><th>Created</th></tr></thead><tbody>{cases.map((kase) => <tr key={kase.id}><td><strong>{kase.title}</strong><br /><span className="muted">{kase.id.slice(0, 8)}</span></td><td><StatusBadge status={kase.status} /></td><td>{kase.caseType.replaceAll('_', ' ')}</td><td>{kase.createdAt.toLocaleString('id-ID')}</td></tr>)}</tbody></table>
-            </div>
-            <div className="card">
-              <div className="panel-title"><h3>Recent jobs</h3><span className="kpi">{jobs.length} rows</span></div>
-              <table className="table"><thead><tr><th>Job</th><th>Status</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td>{job.jobType}</td><td><StatusBadge status={job.status} /></td><td>{job.attempts}/{job.maxAttempts}</td><td>{job.errorMessage ?? '-'}</td></tr>)}</tbody></table>
-            </div>
+            <CaseWorklist rows={caseRows} title="Recent cases" description="Operational case list with priority sorting and bulk ID actions." />
+            <JobWorklist rows={jobRows} />
           </div>
           <aside className="stack">
             <div className="card">
               <div className="panel-title"><h3>Data requests</h3><span className="kpi">{dataRequests.length} rows</span></div>
-              <div className="rail">{dataRequests.map((request) => <div className="rail-item" key={request.id}><div className="actions" style={{ justifyContent: 'space-between' }}><strong>{request.requestType}</strong><StatusBadge status={request.status} /></div><span className="rail-meta">{request.requestedAt.toLocaleString('id-ID')}</span></div>)}</div>
+              <div className="rail">{dataRequests.map((request) => <div className="rail-item" key={request.id}><div className="dense-row"><strong>{request.requestType}</strong><StatusBadge status={request.status} /></div><span className="rail-meta">{request.requestedAt.toLocaleString('id-ID')}</span></div>)}</div>
             </div>
             <div className="card">
               <div className="panel-title"><h3>Retention runs</h3><span className="kpi">{retentionRuns.length} rows</span></div>

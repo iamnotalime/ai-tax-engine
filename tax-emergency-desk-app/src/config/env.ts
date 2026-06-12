@@ -67,6 +67,7 @@ const envSchema = z.object({
   OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   INTERNAL_JOB_TOKEN: z.string().min(8),
+  METRICS_TOKEN: emptyStringToUndefined(z.string()),
   JOB_BACKEND: z.enum(['db', 'temporal']).default('db'),
   TEMPORAL_ADDRESS: z.string().default('127.0.0.1:7233'),
   TEMPORAL_NAMESPACE: z.string().default('default'),
@@ -112,6 +113,13 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['INTERNAL_JOB_TOKEN'],
       message: 'Production INTERNAL_JOB_TOKEN must be a non-placeholder secret of at least 32 characters.'
+    });
+  }
+  if (!env.METRICS_TOKEN || env.METRICS_TOKEN.length < 32 || env.METRICS_TOKEN.includes('replace-with')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['METRICS_TOKEN'],
+      message: 'Production METRICS_TOKEN must be a non-placeholder secret of at least 32 characters.'
     });
   }
   if (env.AI_PROVIDER === 'mock') {

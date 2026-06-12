@@ -8,7 +8,8 @@ import { assertSameOrigin } from '@/lib/security';
 import { auditLog } from '@/server/audit/audit';
 import { assertCanAccessCase, assertCanApprove } from '@/server/auth/authorization';
 import { requireRole } from '@/server/auth/session';
-import { ReviewDecision, ReviewType, type Case } from '@/server/db/types';
+import { transitionCaseStatus } from '@/server/cases/service';
+import { CaseStatus, ReviewDecision, ReviewType, type Case } from '@/server/db/types';
 
 const schema = z.object({
   reviewType: z.nativeEnum(ReviewType),
@@ -65,7 +66,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
         returning *
       `;
       if (input.decision === 'approve' && input.reviewType === 'senior_qc') {
-        await tx`update cases set status = 'final_draft_ready', updated_at = now() where id = ${caseId} and tenant_id = ${kase.tenantId}`;
+        await transitionCaseStatus(tx, {
+          caseId,
+          fromStatus: kase.status,
+          toStatus: CaseStatus.final_draft_ready,
+          actorUserId: user.id,
+          eventType: 'review.status_changed',
+          payload: { reviewId: created.id, decision: input.decision, reviewType: input.reviewType }
+        });
         const [deliverable] = await tx<Array<{ id: string }>>`
           select id from deliverables where case_id = ${caseId} order by created_at desc limit 1
         `;
@@ -77,7 +85,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
           `;
         }
       } else if (input.decision === 'request_more_docs') {
-        await tx`update cases set status = 'need_more_docs', updated_at = now() where id = ${caseId} and tenant_id = ${kase.tenantId}`;
+        await transitionCaseStatus(tx, {
+          caseId,
+          fromStatus: kase.status,
+          toStatus: CaseStatus.need_more_docs,
+          actorUserId: user.id,
+          eventType: 'review.status_changed',
+          payload: { reviewId: created.id, decision: input.decision, reviewType: input.reviewType }
+        });
       }
       await tx`
         insert into case_events (case_id, event_type, actor_user_id, payload)

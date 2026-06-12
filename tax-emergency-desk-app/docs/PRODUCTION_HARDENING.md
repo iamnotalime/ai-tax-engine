@@ -19,8 +19,17 @@
 - Production env now requires document encryption, external OCR, ClamAV malware scanning, OpenAI AI provider, and reviewer assignment enforcement.
 - Uploads no longer accept spreadsheet formats through the vulnerable `xlsx` parser path; CSV/XML/text/PDF/image flows remain.
 - Document upload now runs signature validation, malware scanning, OCR/text extraction, encryption, and private storage.
+- Document upload now enforces package-level document-count caps through tested server helpers.
 - Data export, deletion request, deletion job, and retention sweep workflows are implemented.
+- Privacy deletion requests are idempotent while open and emit metrics for requested, fulfilled, and failed outcomes.
 - Admin has retention/data request visibility, and users have a privacy control page.
+- Case status changes now go through explicit transition validation helpers across upload, triage, AI workflow, reviewer, outcome, and admin paths.
+- Case status writes now compare the expected status in SQL and reject stale concurrent transitions with `CASE_STATUS_CONFLICT`.
+- Unsafe fabrication intent checks are wired into intake and triage.
+- NPWP intake stores only a stable hash and encrypted bytes; encrypted bytes are removed from JSON responses and privacy exports.
+- Strict same-origin checks, CSP, HSTS, cross-origin isolation headers, restrictive permissions policy, issuer/audience JWT validation, and strict same-site session cookies are implemented.
+- `/api/metrics`, `monitoring_events`, and `backup_runs` provide first-party Prometheus signals for AI provider failures, support-check failures, job failures, HTTP errors, rate limits, privacy request outcomes, backup freshness, retention freshness, and stale open deletion requests.
+- `production:check` asserts the required Prometheus alert-rule contract for AI, privacy, retention, backup, and rate-limit alerts.
 - CI now runs lint, typecheck, tests, build, and high-severity production dependency audit.
 
 ## Known external gates to close before real customer launch

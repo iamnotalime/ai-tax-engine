@@ -6,9 +6,10 @@ import { assertSameOrigin } from '@/lib/security';
 import { auditLog } from '@/server/audit/audit';
 import { requireUser } from '@/server/auth/session';
 import { assertCanAccessCase } from '@/server/auth/authorization';
+import { assertDocumentUploadLimit } from '@/server/documents/limits';
 import { storeCaseDocument } from '@/server/documents/upload';
 import { assertRateLimit, RATE_LIMITS } from '@/server/rate-limit';
-import type { Case } from '@/server/db/types';
+import { CaseStatus, type Case } from '@/server/db/types';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: string }> }) {
   try {
@@ -23,8 +24,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
     const form = await req.formData();
     const files = form.getAll('files').filter((value): value is File => value instanceof File);
     if (!files.length) throw new AppError('NO_FILES', 'Tidak ada file yang diunggah.', 400);
+    const [{ count: existingDocumentCount }] = await sql<Array<{ count: number }>>`
+      select count(*)::int as count
+      from documents
+      where case_id = ${caseId}
+        and status <> 'deleted'
+    `;
+    assertDocumentUploadLimit({ packageCode: kase.packageCode, existingDocumentCount, attemptedUploadCount: files.length });
     const documents = [];
-    for (const file of files) documents.push(await storeCaseDocument({ caseId, uploadedByUserId: user.id, file }));
+    let fromStatus = kase.status;
+    for (const file of files) {
+      documents.push(await storeCaseDocument({ caseId, uploadedByUserId: user.id, file, fromStatus }));
+      fromStatus = CaseStatus.docs_uploaded;
+    }
     await auditLog({
       actorUserId: user.id,
       action: 'document.upload',

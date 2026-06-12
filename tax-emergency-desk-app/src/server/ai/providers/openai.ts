@@ -78,6 +78,11 @@ export class OpenAiLlmProvider implements LlmProvider {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
+      if (error instanceof z.ZodError) {
+        throw new AppError('AI_SCHEMA_VALIDATION_FAILED', 'AI provider response did not match the required schema.', 502, {
+          issues: error.issues
+        });
+      }
       const message = error instanceof Error ? error.message : String(error);
       throw new AppError('AI_PROVIDER_ERROR', `AI SDK v5 OpenAI error: ${message}`, 502);
     }

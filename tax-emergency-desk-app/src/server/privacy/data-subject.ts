@@ -1,14 +1,16 @@
 import { jsonb, sql } from '@/lib/db';
 import { AppError } from '@/lib/errors';
 import { auditLog } from '@/server/audit/audit';
+import { sanitizeCaseForResponse } from '@/server/cases/service';
 import type { AppUser, Case, DataSubjectRequestRow, DocumentRow } from '@/server/db/types';
 import { enqueueJob } from '@/server/jobs/queue';
+import { recordMonitoringEvent } from '@/server/observability/metrics';
 import { getStorageAdapter } from '@/server/storage';
 
 type ExportBundle = {
   exportedAt: string;
   user: Pick<AppUser, 'id' | 'email' | 'fullName' | 'phone' | 'role' | 'createdAt'>;
-  cases: Case[];
+  cases: Array<Omit<Case, 'taxpayerNpwpEncrypted'>>;
   documents: DocumentRow[];
   aiOutputs: Record<string, unknown>[];
   deliverables: Record<string, unknown>[];
@@ -53,7 +55,7 @@ export async function buildDataExport(user: AppUser, tenantId: string): Promise<
       role: user.role,
       createdAt: user.createdAt
     },
-    cases,
+    cases: cases.map(sanitizeCaseForResponse),
     documents,
     aiOutputs,
     deliverables,
@@ -77,16 +79,42 @@ export async function recordFulfilledExport(user: AppUser, tenantId: string, sum
     values (${tenantId}, ${user.id}, ${user.id}, 'export', 'fulfilled', now(), ${jsonb(summary)})
     returning *
   `;
+  await recordMonitoringEvent({
+    metricName: 'taxdesk_privacy_requests_total',
+    eventType: 'privacy.export_fulfilled',
+    tenantId,
+    labels: { request_type: 'export', status: 'fulfilled' },
+    payload: { requestId: request.id, ...summary }
+  });
   return request;
 }
 
 export async function requestDataDeletion(user: AppUser, tenantId: string) {
+  const [existing] = await sql<DataSubjectRequestRow[]>`
+    select *
+    from data_subject_requests
+    where tenant_id = ${tenantId}
+      and target_user_id = ${user.id}
+      and request_type = 'delete'
+      and status in ('requested', 'processing')
+    order by requested_at desc
+    limit 1
+  `;
+  if (existing) return existing;
+
   const [request] = await sql<DataSubjectRequestRow[]>`
     insert into data_subject_requests (tenant_id, requester_user_id, target_user_id, request_type, payload)
     values (${tenantId}, ${user.id}, ${user.id}, 'delete', ${jsonb({ requestedBy: 'self_service' })})
     returning *
   `;
   await enqueueJob('data_deletion', { requestId: request.id, tenantId }, 10, tenantId);
+  await recordMonitoringEvent({
+    metricName: 'taxdesk_privacy_requests_total',
+    eventType: 'privacy.delete_requested',
+    tenantId,
+    labels: { request_type: 'delete', status: 'requested' },
+    payload: { requestId: request.id }
+  });
   return request;
 }
 
@@ -152,6 +180,13 @@ export async function processDataDeletionRequest(requestId: string) {
       tenantId: request.tenantId,
       payload: { targetUserId: request.targetUserId, deletedCaseCount: deletedCaseIds.length, deletedDocumentCount }
     });
+    await recordMonitoringEvent({
+      metricName: 'taxdesk_privacy_requests_total',
+      eventType: 'privacy.delete_fulfilled',
+      tenantId: request.tenantId,
+      labels: { request_type: 'delete', status: 'fulfilled' },
+      payload: { requestId: request.id, deletedCaseCount: deletedCaseIds.length, deletedDocumentCount }
+    });
     return { deletedCaseCount: deletedCaseIds.length, deletedDocumentCount };
   } catch (error) {
     await sql`
@@ -159,6 +194,13 @@ export async function processDataDeletionRequest(requestId: string) {
       set status = 'failed', error_message = ${error instanceof Error ? error.message : String(error)}
       where id = ${request.id}
     `;
+    await recordMonitoringEvent({
+      metricName: 'taxdesk_privacy_requests_total',
+      eventType: 'privacy.delete_failed',
+      tenantId: request.tenantId,
+      labels: { request_type: 'delete', status: 'failed' },
+      payload: { requestId: request.id, errorMessage: error instanceof Error ? error.message : String(error) }
+    });
     throw error;
   }
 }

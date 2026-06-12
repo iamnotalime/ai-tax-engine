@@ -23,6 +23,7 @@
 - `AI_PROVIDER=openai`.
 - `JOB_BACKEND=temporal`.
 - `KEYVAL_CACHE_ENABLED=true`.
+- `METRICS_TOKEN` set and configured in Prometheus as a bearer token for `/api/metrics`.
 - `REVIEW_ASSIGNMENT_REQUIRED=true`.
 
 ## Release Gate
@@ -39,6 +40,21 @@ npm run build
 npm audit --omit=dev --audit-level=high
 npm run db:deploy
 npm run production:check
+```
+
+Prometheus must scrape:
+
+```text
+GET /api/metrics
+Authorization: Bearer <METRICS_TOKEN>
+```
+
+Load `monitoring/prometheus-rules.yml` and verify alerts for AI provider timeout, AI schema validation failure, support-check failure, rate-limit spike, privacy deletion failure/stall, retention failure/staleness, and stale backups. `npm run production:check` fails if the required alert names are missing.
+
+Production smoke tests that call mutating API routes directly must send:
+
+```http
+Origin: <NEXT_PUBLIC_APP_URL>
 ```
 
 Run before first customer traffic:
@@ -65,7 +81,7 @@ Restore into an isolated database only:
 RESTORE_CONFIRM=I_UNDERSTAND_THIS_OVERWRITES_DATABASE npm run db:restore -- ./backups/taxdesk-example.dump
 ```
 
-After a successful restore drill, update `docs/evidence/BACKUP_RESTORE_DRILL.md` to `status: approved`.
+`npm run db:backup` records successful runs in `backup_runs`, which powers `taxdesk_last_backup_success_timestamp`. After a successful restore drill, update `docs/evidence/BACKUP_RESTORE_DRILL.md` to `status: approved`.
 
 ## Production Certification Evidence
 
@@ -77,10 +93,10 @@ After a successful restore drill, update `docs/evidence/BACKUP_RESTORE_DRILL.md`
 - `docs/evidence/INCIDENT_RESPONSE_DRILL.md`
 - `docs/evidence/MONITORING_ALERT_TEST.md`
 
-The command also checks database migrations, S3 put/delete, and ClamAV ping unless `PRODUCTION_CHECK_SKIP_EXTERNALS=true` is set.
+The command also checks database migrations, Prometheus metric rendering, S3 put/delete, Temporal reachability, and ClamAV ping unless `PRODUCTION_CHECK_SKIP_EXTERNALS=true` is set.
 
 ## Deployment Template
 
 Use `Dockerfile` and `docker-compose.production.yml` as a reference deployment template. In managed cloud deployments, replace the compose-managed Postgres/MinIO services with managed equivalents and keep the same required environment variables.
 
-Prometheus-style alert examples live in `monitoring/prometheus-rules.yml`.
+Prometheus alert rules live in `monitoring/prometheus-rules.yml` and are backed by the `/api/metrics` endpoint plus `monitoring_events`, `backup_runs`, `retention_runs`, and job state.

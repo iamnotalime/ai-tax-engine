@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server';
-import { jsonb, sql } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { AppError, toErrorResponse } from '@/lib/errors';
 import { getRequestMeta } from '@/lib/http';
 import { assertSameOrigin } from '@/lib/security';
 import { auditLog } from '@/server/audit/audit';
 import { requireUser } from '@/server/auth/session';
 import { assertCanAccessCase } from '@/server/auth/authorization';
-import type { Case } from '@/server/db/types';
+import { transitionCaseStatus } from '@/server/cases/service';
+import { CaseStatus, type Case } from '@/server/db/types';
+import { assertSafeUserIntent } from '@/server/ai/guardrails';
 import { enqueueTaxTriage } from '@/server/jobs/enqueue';
 import { assertRateLimit, RATE_LIMITS } from '@/server/rate-limit';
 
@@ -21,13 +23,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ caseId: st
     await assertRateLimit(req, RATE_LIMITS.triageCase, [kase.tenantId, user.id, caseId]);
     const [{ count }] = await sql<Array<{ count: number }>>`select count(*)::int as count from documents where case_id = ${caseId}`;
     if (!count) throw new AppError('NO_DOCUMENTS', 'Unggah dokumen terlebih dahulu.', 400);
+    assertSafeUserIntent([kase.title, kase.taxpayerName].filter(Boolean).join('\n'));
     const job = await enqueueTaxTriage({ caseId, tenantId: kase.tenantId, requestedByUserId: user.id });
     await sql.begin(async (tx) => {
-      await tx`update cases set status = 'ai_triage_queued', updated_at = now() where id = ${caseId}`;
-      await tx`
-        insert into case_events (case_id, event_type, from_status, to_status, actor_user_id, payload)
-        values (${caseId}, 'ai.triage_queued', ${kase.status}, 'ai_triage_queued', ${user.id}, ${jsonb({ jobId: job.id, backend: job.backend })})
-      `;
+      await transitionCaseStatus(tx, {
+        caseId,
+        fromStatus: kase.status,
+        toStatus: CaseStatus.ai_triage_queued,
+        actorUserId: user.id,
+        eventType: 'ai.triage_queued',
+        payload: { jobId: job.id, backend: job.backend }
+      });
     });
     const requestMeta = getRequestMeta(req);
     await auditLog({

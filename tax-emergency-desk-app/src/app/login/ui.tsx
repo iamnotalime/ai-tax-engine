@@ -1,41 +1,57 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { LogIn, UserPlus } from 'lucide-react';
+import { FormEvent, useState } from 'react';
 
 export function LoginForm() {
-  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [error, setError] = useState<string | null>(null);
-  async function submit(formData: FormData) {
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     setError(null);
+    setBusy(true);
     const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
     const body = {
       email: String(formData.get('email')).trim(),
       password: String(formData.get('password')),
       fullName: String(formData.get('fullName') ?? 'Tax Desk User').trim()
     };
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) {
-      const contentType = res.headers.get('content-type') ?? '';
-      const json = contentType.includes('application/json') ? await res.json() : null;
-      setError(json?.error?.message ?? 'Gagal login.');
-      return;
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const contentType = res.headers.get('content-type') ?? '';
+        const json = contentType.includes('application/json') ? await res.json() : null;
+        setError(json?.error?.message ?? 'Gagal login.');
+        return;
+      }
+      window.location.assign('/dashboard');
+    } catch {
+      setError('Gagal menghubungi server login.');
+    } finally {
+      setBusy(false);
     }
-    router.push('/dashboard');
-    router.refresh();
   }
   return (
-    <form className="form-card" action={submit}>
-      <div className="actions" style={{ marginBottom: 18 }}>
-        <button className="button" type="button" onClick={() => setMode('login')}>Login</button>
-        <button className="button" type="button" onClick={() => setMode('signup')}>Daftar</button>
+    <form className="form-card" action="/api/auth/login" method="post" onSubmit={submit}>
+      <div className="actions mode-switch">
+        <button className={mode === 'login' ? 'button primary' : 'button'} type="button" onClick={() => setMode('login')} disabled={busy}><LogIn size={18} aria-hidden="true" /> Login</button>
+        <button className={mode === 'signup' ? 'button primary' : 'button'} type="button" onClick={() => setMode('signup')} disabled={busy}><UserPlus size={18} aria-hidden="true" /> Daftar</button>
       </div>
-      {mode === 'signup' && <div className="field"><label>Nama lengkap</label><input name="fullName" required minLength={2} /></div>}
-      <div className="field"><label>Email</label><input name="email" type="email" required /></div>
-      <div className="field"><label>Password</label><input name="password" type="password" required minLength={mode === 'signup' ? 10 : 1} /></div>
-      {error && <p className="alert">{error}</p>}
-      <button className="button primary" type="submit">{mode === 'login' ? 'Masuk' : 'Buat akun'}</button>
+      {mode === 'signup' && <div className="field"><label htmlFor="fullName">Nama lengkap</label><input id="fullName" name="fullName" required minLength={2} autoComplete="name" /></div>}
+      <div className="field"><label htmlFor="email">Email</label><input id="email" name="email" type="email" required autoComplete="email" /></div>
+      <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" required minLength={mode === 'signup' ? 10 : 1} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></div>
+      <div aria-live="polite">{error && <p className="alert">{error}</p>}</div>
+      <button className="button primary" type="submit" disabled={busy}>
+        {mode === 'login' ? <><LogIn size={18} aria-hidden="true" /> {busy ? 'Masuk...' : 'Masuk'}</> : <><UserPlus size={18} aria-hidden="true" /> {busy ? 'Membuat akun...' : 'Buat akun'}</>}
+      </button>
     </form>
   );
 }
