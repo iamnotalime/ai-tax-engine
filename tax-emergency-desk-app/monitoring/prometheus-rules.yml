@@ -1,0 +1,42 @@
+groups:
+  - name: taxdesk-production
+    rules:
+      - alert: TaxDeskHealthEndpointDown
+        expr: probe_success{job="taxdesk-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Tax Emergency Desk health endpoint is down
+
+      - alert: TaxDeskUnauthorizedSpike
+        expr: increase(taxdesk_http_responses_total{status=~"401|403"}[10m]) > 25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Unauthorized access responses spiked
+
+      - alert: TaxDeskAiFailures
+        expr: increase(taxdesk_jobs_failed_total{job_type="tax_triage"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: AI triage job failures exceeded threshold
+
+      - alert: TaxDeskRetentionNotRunning
+        expr: time() - taxdesk_last_retention_success_timestamp > 172800
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Retention sweep has not completed for 48 hours
+
+      - alert: TaxDeskBackupStale
+        expr: time() - taxdesk_last_backup_success_timestamp > 90000
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: Database backup is older than 25 hours
